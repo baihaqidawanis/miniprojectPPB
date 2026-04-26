@@ -1,0 +1,46 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ──────────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isCommittee() {
+      return isSignedIn()
+          && !request.auth.token.firebase.sign_in_provider.matches('anonymous')
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'committee';
+    }
+
+    // ── Matches ───────────────────────────────────────────────────
+    // Semua user (termasuk anonymous/guest) bisa READ
+    // Hanya committee yang bisa CREATE / UPDATE / DELETE
+    match /matches/{matchId} {
+      allow read: if true;
+      allow create, update, delete: if isCommittee();
+
+      // Sub-collection starting XI
+      match /homeStartingXI/{doc} {
+        allow read: if true;
+        allow write: if isCommittee();
+      }
+      match /awayStartingXI/{doc} {
+        allow read: if true;
+        allow write: if isCommittee();
+      }
+    }
+
+    // ── News ──────────────────────────────────────────────────────
+    match /news/{newsId} {
+      allow read: if true;
+      allow create, update, delete: if isCommittee();
+    }
+
+    // ── Users ─────────────────────────────────────────────────────
+    // User hanya bisa baca/tulis dokumen milik sendiri
+    match /users/{userId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+  }
+}
