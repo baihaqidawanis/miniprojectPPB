@@ -7,7 +7,9 @@ import 'dart:io';
 import '../models/match_model.dart';
 import '../services/match_service.dart';
 import '../services/storage_service.dart';
+import '../services/groq_service.dart';
 import '../providers/auth_provider.dart';
+import 'admin_add_news_screen.dart';
 
 class MatchDetailScreen extends StatefulWidget {
   final MatchModel match;
@@ -22,6 +24,81 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
   final StorageService _storageService = StorageService();
   final ImagePicker _picker = ImagePicker();
   bool _isSaving = false;
+
+  Future<void> _generateNewsWithAI(BuildContext context, MatchModel match) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const Center(child: CircularProgressIndicator(color: Colors.greenAccent)),
+    );
+
+    try {
+      final groq = GroqService();
+      final result = await groq.generateMatchNews(match);
+      
+      if (!mounted) return;
+      Navigator.pop(context); // Close dialog
+      
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (ctx) => AdminAddNewsScreen(
+            initialTitle: result['title'],
+            initialContent: result['content'],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // Close dialog
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Error AI: $e'),
+        backgroundColor: Colors.redAccent,
+      ));
+    }
+  }
+
+  Future<void> _generateDummyData(MatchModel match) async {
+    setState(() => _isSaving = true);
+    try {
+      final now = DateTime.now();
+      final int homePossession = 40 + (match.homeScore >= match.awayScore ? 10 : 0) + (now.millisecond % 20);
+      final int awayPossession = 100 - homePossession;
+      
+      final stats = {
+        'Penguasaan Bola': '$homePossession% - $awayPossession%',
+        'Tembakan ke Gawang': '${match.homeScore + (now.millisecond % 5)} - ${match.awayScore + (now.microsecond % 5)}',
+        'Pelanggaran': '${10 + (now.millisecond % 10)} - ${10 + (now.microsecond % 10)}',
+        'Tendangan Sudut': '${3 + (now.millisecond % 6)} - ${3 + (now.microsecond % 6)}',
+      };
+
+      List<dynamic> events = [];
+      
+      for (int i = 0; i < match.homeScore; i++) {
+        events.add({'minute': 10 + (i * 15) % 80, 'type': 'goal', 'team': 'home', 'player': 'Pemain Home ${i+1}'});
+      }
+      for (int i = 0; i < match.awayScore; i++) {
+        events.add({'minute': 15 + (i * 20) % 80, 'type': 'goal', 'team': 'away', 'player': 'Pemain Away ${i+1}'});
+      }
+      events.add({'minute': 25 + (now.millisecond % 20), 'type': 'yellow_card', 'team': 'home', 'player': 'Bek Home'});
+      events.add({'minute': 65 + (now.microsecond % 20), 'type': 'yellow_card', 'team': 'away', 'player': 'Gelandang Away'});
+
+      events.sort((a, b) => (a['minute'] as int).compareTo(b['minute'] as int));
+
+      await _matchService.updateMatchFields(match.id, {
+        'stats': stats,
+        'events': events,
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Data dummy berhasil dibuat!', style: TextStyle(color: Colors.black)), backgroundColor: Colors.greenAccent));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent));
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
 
   Future<void> _pickAndUploadXiPhoto(String teamType) async {
     // Tampilkan pilihan: kamera atau galeri
@@ -246,6 +323,9 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                 Divider(color: Colors.grey.shade800),
                 const SizedBox(height: 16),
 
+                _buildStats(match),
+                _buildTimeline(match),
+
                 // Starting XI header
                 const Text(
                   'STARTING XI',
@@ -261,11 +341,97 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
                     Expanded(child: _buildLineupSection(context, match, 'away', isCommittee)),
                   ],
                 ),
+
+                if (isCommittee) ...[
+                  const SizedBox(height: 32),
+                  if (match.events.isEmpty)
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Colors.grey),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.data_object),
+                      label: const Text('GENERATE DUMMY MATCH DATA'),
+                      onPressed: () => _generateDummyData(match),
+                    ),
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.greenAccent,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.auto_awesome),
+                    label: const Text('GENERATE NEWS WITH AI', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+                    onPressed: () => _generateNewsWithAI(context, match),
+                  ),
+                ],
               ],
             ),
           );
         },
       ),
+    );
+  }
+
+  Widget _buildTimeline(MatchModel match) {
+    if (match.events.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('TIMELINE PERTANDINGAN', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, letterSpacing: 1.5, fontSize: 13)),
+        const SizedBox(height: 12),
+        ...match.events.map((e) {
+          final isHome = e['team'] == 'home';
+          final icon = e['type'] == 'goal' ? '⚽' : (e['type'] == 'yellow_card' ? '🟨' : '🟥');
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              mainAxisAlignment: isHome ? MainAxisAlignment.start : MainAxisAlignment.end,
+              children: [
+                if (isHome) Text('${e['minute']}\' $icon  ${e['player']}', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                if (!isHome) Text('${e['player']}  $icon ${e['minute']}\'', style: const TextStyle(color: Colors.white, fontSize: 13)),
+              ],
+            ),
+          );
+        }).toList(),
+        const SizedBox(height: 24),
+        Divider(color: Colors.grey.shade800),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  Widget _buildStats(MatchModel match) {
+    if (match.stats.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('STATISTIK PERTANDINGAN', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, letterSpacing: 1.5, fontSize: 13)),
+        const SizedBox(height: 12),
+        ...match.stats.entries.map((entry) {
+          final parts = entry.value.toString().split(' - ');
+          final homeVal = parts.isNotEmpty ? parts[0] : '';
+          final awayVal = parts.length > 1 ? parts[1] : '';
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(child: Text(homeVal, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14))),
+                Expanded(flex: 2, child: Text(entry.key, textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade400, fontSize: 12))),
+                Expanded(child: Text(awayVal, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14))),
+              ],
+            ),
+          );
+        }).toList(),
+        const SizedBox(height: 24),
+        Divider(color: Colors.grey.shade800),
+        const SizedBox(height: 16),
+      ],
     );
   }
 

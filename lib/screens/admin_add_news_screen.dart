@@ -7,19 +7,36 @@ import '../services/news_service.dart';
 import '../providers/auth_provider.dart';
 
 class AdminAddNewsScreen extends StatefulWidget {
-  const AdminAddNewsScreen({super.key});
+  final String? initialTitle;
+  final String? initialContent;
+
+  const AdminAddNewsScreen({super.key, this.initialTitle, this.initialContent});
 
   @override
   State<AdminAddNewsScreen> createState() => _AdminAddNewsScreenState();
 }
 
 class _AdminAddNewsScreenState extends State<AdminAddNewsScreen> {
-  final _titleCtrl = TextEditingController();
-  final _contentCtrl = TextEditingController();
+  late final TextEditingController _titleCtrl;
+  late final TextEditingController _contentCtrl;
   File? _coverImage;
   final _picker = ImagePicker();
   final _newsService = NewsService();
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleCtrl = TextEditingController(text: widget.initialTitle);
+    _contentCtrl = TextEditingController(text: widget.initialContent);
+  }
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _contentCtrl.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickImage() async {
     showModalBottomSheet(

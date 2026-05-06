@@ -9,7 +9,7 @@ class StorageService {
 
   StorageService() {
     _minio = Minio(
-      endPoint: '10.0.2.2',
+      endPoint: '192.168.10.135',
       port: 9000,
       useSSL: false,
       accessKey: 'adminadmin',

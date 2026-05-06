@@ -17,6 +17,8 @@ class MatchModel {
   final String awayLineup;
   final String? homeStartingXiPhotoUrl;
   final String? awayStartingXiPhotoUrl;
+  final List<dynamic> events;
+  final Map<String, dynamic> stats;
 
   MatchModel({
     required this.id,
@@ -35,6 +37,8 @@ class MatchModel {
     this.awayLineup = '',
     this.homeStartingXiPhotoUrl,
     this.awayStartingXiPhotoUrl,
+    this.events = const [],
+    this.stats = const {},
   });
 
   factory MatchModel.fromFirestore(DocumentSnapshot doc) {
@@ -56,6 +60,8 @@ class MatchModel {
       awayLineup: data['awayLineup'] ?? '',
       homeStartingXiPhotoUrl: data['homeStartingXiPhotoUrl'],
       awayStartingXiPhotoUrl: data['awayStartingXiPhotoUrl'],
+      events: data['events'] ?? [],
+      stats: data['stats'] ?? {},
     );
   }
 
@@ -76,6 +82,8 @@ class MatchModel {
       'awayLineup': awayLineup,
       'homeStartingXiPhotoUrl': homeStartingXiPhotoUrl,
       'awayStartingXiPhotoUrl': awayStartingXiPhotoUrl,
+      'events': events,
+      'stats': stats,
     };
   }
 }
