@@ -9,7 +9,7 @@ class StorageService {
 
   StorageService() {
     _minio = Minio(
-      endPoint: '192.168.10.135',
+      endPoint: '10.0.2.2',
       port: 9000,
       useSSL: false,
       accessKey: 'adminadmin',
@@ -19,15 +19,19 @@ class StorageService {
 
   String _buildUrl(String objectName) {
     final protocol = _minio.useSSL ? 'https' : 'http';
-    final portStr = (_minio.port == 80 || _minio.port == 443) ? '' : ':${_minio.port}';
+    final portStr = (_minio.port == 80 || _minio.port == 443)
+        ? ''
+        : ':${_minio.port}';
     return '$protocol://${_minio.endPoint}$portStr/$_bucketName/$objectName';
   }
 
   Future<String?> _upload(File imageFile, String objectName) async {
     try {
-      final bytes = await imageFile.readAsBytes();
-      final stream = Stream.value(Uint8List.fromList(bytes));
-      await _minio.putObject(_bucketName, objectName, stream, size: bytes.length);
+      final stream = imageFile.openRead().map(
+        (chunk) => Uint8List.fromList(chunk),
+      );
+      final length = await imageFile.length();
+      await _minio.putObject(_bucketName, objectName, stream, size: length);
       return _buildUrl(objectName);
     } catch (e) {
       print('[StorageService] Error upload: $e');
@@ -35,7 +39,11 @@ class StorageService {
     }
   }
 
-  Future<String?> uploadTeamPhoto(File imageFile, String matchId, String teamType) async {
+  Future<String?> uploadTeamPhoto(
+    File imageFile,
+    String matchId,
+    String teamType,
+  ) async {
     final ext = path.extension(imageFile.path);
     return _upload(imageFile, 'matches/$matchId/${teamType}_logo$ext');
   }
@@ -45,7 +53,11 @@ class StorageService {
     return _upload(imageFile, 'profiles/$userId/avatar$ext');
   }
 
-  Future<String?> uploadStartingXiPhoto(File imageFile, String matchId, String teamType) async {
+  Future<String?> uploadStartingXiPhoto(
+    File imageFile,
+    String matchId,
+    String teamType,
+  ) async {
     final ext = path.extension(imageFile.path);
     return _upload(imageFile, 'matches/$matchId/${teamType}_xi$ext');
   }

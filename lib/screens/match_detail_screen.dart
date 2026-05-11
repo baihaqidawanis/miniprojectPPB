@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 
 import '../models/match_model.dart';
 import '../services/match_service.dart';
@@ -162,15 +163,102 @@ class _MatchDetailScreenState extends State<MatchDetailScreen> {
     }
   }
 
+  Future<void> _scanTextFromImage(TextEditingController ctrl) async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        decoration: const BoxDecoration(
+          color: Color(0xFF1E1E1E),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36, height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(2)),
+            ),
+            const Text(
+              'Pilih Sumber Foto Lineup',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              tileColor: Colors.grey.shade900,
+              leading: const Icon(Icons.camera_alt, color: Colors.greenAccent),
+              title: const Text('Ambil dari Kamera', style: TextStyle(color: Colors.white)),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              tileColor: Colors.grey.shade900,
+              leading: const Icon(Icons.photo_library, color: Colors.greenAccent),
+              title: const Text('Pilih dari Galeri', style: TextStyle(color: Colors.white)),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (source == null || !mounted) return;
+
+    final picked = await _picker.pickImage(source: source, imageQuality: 80);
+    if (picked == null || !mounted) return;
+
+    setState(() => _isSaving = true);
+    
+    try {
+      final inputImage = InputImage.fromFilePath(picked.path);
+      final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+      
+      final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
+      
+      String currentText = ctrl.text;
+      if (currentText.isNotEmpty && !currentText.endsWith('\n')) {
+        currentText += '\n\n';
+      }
+      ctrl.text = currentText + recognizedText.text;
+      
+      await textRecognizer.close();
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Berhasil membaca teks dari foto!', style: TextStyle(color: Colors.black)),
+        backgroundColor: Colors.greenAccent,
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Gagal membaca teks: $e'),
+        backgroundColor: Colors.redAccent,
+      ));
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
   Future<void> _editLineup(String teamType, String currentLineup) async {
     final ctrl = TextEditingController(text: currentLineup);
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.grey.shade900,
-        title: Text(
-          'Susunan Pemain',
-          style: const TextStyle(color: Colors.white),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Susunan Pemain', style: TextStyle(color: Colors.white, fontSize: 18)),
+            IconButton(
+              icon: const Icon(Icons.document_scanner, color: Colors.greenAccent),
+              tooltip: 'Scan dari Foto',
+              onPressed: () => _scanTextFromImage(ctrl),
+            ),
+          ],
         ),
         content: TextField(
           controller: ctrl,
