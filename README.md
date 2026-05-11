@@ -1,4 +1,3 @@
-<img width="315" height="737" alt="Screenshot 2026-05-11 223205" src="https://github.com/user-attachments/assets/e98febda-7135-47da-99c4-793c7682e024" />
 # miniproject_pbb
 
 Link DEMO : https://drive.google.com/file/d/1garDrQr1CJMCZOYo71_Ba3xVvDyk-1f_/view?usp=sharing
